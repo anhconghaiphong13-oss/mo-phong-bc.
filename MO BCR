@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mo-phong-BCR (Bead Road) - AI Predictor</title>
+<style>
+  :root{
+    --bg:#f7f7fb;--card:#fff;--muted:#666;
+    --red:#e03131;--blue:#2c7be5;--draw:#9aa0a6;
+  }
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:#111; margin:0;padding:20px;}
+  .container{max-width:1100px;margin:0 auto;}
+  .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 20px rgba(12,18,36,0.06);margin-bottom:16px;}
+  h1{margin:0 0 8px 0;font-size:20px;}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;}
+  button{padding:10px 14px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+  .btn-red{background:var(--red);color:white} .btn-blue{background:var(--blue);color:white} .btn-draw{background:var(--draw);color:white}
+  .small{font-size:13px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:12px;}
+  .bead-road{width:100%;height:420px;background:#fafafa;border-radius:8px;padding:10px;overflow:auto;border:1px solid #eee}
+  .columns{display:flex;gap:6px;align-items:flex-start}
+  .col{display:flex;flex-direction:column;gap:6px;min-width:42px}
+  .cell{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.05)}
+  .cell.R{background:var(--red)} .cell.B{background:var(--blue)} .cell.C{background:var(--draw); color:#fff}
+  .stats{display:flex;flex-direction:column;gap:8px}
+  .stat-row{display:flex;justify-content:space-between;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:6px;border-bottom:1px solid #f0f0f0;text-align:left}
+  .log{max-height:220px;overflow:auto;}
+  .chart{height:120px}
+  .footer{font-size:12px;color:var(--muted);margin-top:8px}
+  .controls .mini{padding:8px 10px;font-size:13px}
+  .kbd{background:#f3f4f6;padding:6px;border-radius:6px;font-family:monospace}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>Mo-phong-BCR — Cột cầu (Bead Road) + AI Predictor</h1>
+    <div class="small">Nhập kết quả bằng nút, bấm "Dự đoán ván tới" để xem dự đoán. Dữ liệu lưu cục bộ trong trình duyệt.</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="small">Nhập kết quả</div>
+          <div class="controls" style="margin-top:8px">
+            <button class="btn-red" id="btnR">Đỏ</button>
+            <button class="btn-blue" id="btnB">Xanh</button>
+            <button class="btn-draw" id="btnC">Hoà</button>
+            <button class="mini" id="btnPredict" style="background:#5b21b6;color:white;border-radius:8px">Dự đoán ván tiếp</button>
+            <button class="mini" id="btnUndo" style="background:#f3f4f6">Hoàn tác</button>
+            <button class="mini" id="btnExport" style="background:#10b981;color:white">Xuất CSV</button>
+            <button class="mini" id="btnReset" style="background:#ef4444;color:white">Reset</button>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="small">Tên web: <span class="kbd">mo-phong-bcr</span></div>
+          <div class="small">Phiên bản: <strong>1.0</strong></div>
+        </div>
+      </div>
+
+      <hr style="margin:12px 0" />
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1">
+          <div class="small">Cột cầu (Bead Road)</div>
+          <div class="bead-road" id="beadRoad" aria-live="polite" role="region" />
+        </div>
+
+        <div style="width:360px">
+          <div class="card" style="padding:10px">
+            <div class="small">Thống kê nhanh</div>
+            <div class="stats" style="margin-top:8px">
+              <div class="stat-row"><div>Tổng ván</div><div id="statTotal">0</div></div>
+              <div class="stat-row"><div>% Dự đoán đúng</div><div id="statAcc">0%</div></div>
+              <div class="stat-row"><div>% Hoà</div><div id="statDraw">0%</div></div>
+              <div class="stat-row"><div>Tổng đỏ / xanh / hoà</div><div id="counts">0 / 0 / 0</div></div>
+            </div>
+            <hr style="margin:8px 0" />
+            <div class="small">Dự đoán hiện tại</div>
+            <div style="margin-top:8px;font-weight:700" id="predictionBox">Chưa dự đoán</div>
+            <div style="margin-top:8px" class="small">Ghi chú: Mô hình là heuristic (pattern + freq + streak).</div>
+          </div>
+
+          <div class="card" style="margin-top:12px">
+            <div class="small">Biểu đồ tích lũy dự đoán đúng/ sai</div>
+            <canvas id="miniChart" class="chart" width="320" height="120"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px" class="card">
+        <div class="small">Bản ghi (mới nhất trên cùng)</div>
+        <div class="log" id="logArea"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="small">Cấu hình mô hình (cân nặng)</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <label class="small">Pattern weight <input id="wPattern" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+          <label class="small">Frequency weight <input id="wFreq" type="range" min="0" max="1" step="0.05" value="0.3"></label>
+          <label class="small">Streak weight <input id="wStreak" type="range" min="0" max="1" step="0.05" value="0.2"></label>
+        </div>
+        <hr style="margin:10px 0" />
+        <div class="small">Cài đặt dự đoán</div>
+        <div style="margin-top:8px" class="small">
+          Pattern memory length: <input id="patternLen" type="number" value="5" min="1" max="10" style="width:60px">
+          &nbsp;&nbsp; Frequency window (ván): <input id="freqWnd" type="number" value="10" min="1" max="200" style="width:60px">
+        </div>
+        <hr style="margin:10px 0" />
+        <div class="small">Gợi ý cầu tiềm năng</div>
+        <div id="cauGoi" style="margin-top:8px" class="small">-</div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="small">Hướng dẫn nhanh</div>
+        <ol style="padding-left:18px;margin:8px 0">
+          <li>Nhấn <strong>Đỏ/Xanh/Hòa</strong> để thêm ván.</li>
+          <li>Nhấn <strong>Dự đoán ván tiếp</strong> để xem AI dự đoán.</li>
+          <li>Nhấn <strong>Xuất CSV</strong> để tải bản ghi.</li>
+          <li>Reset để xoá toàn bộ lịch sử.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Mọi dữ liệu lưu cục bộ trên trình duyệt. Muốn mình deploy web này lên Vercel, nói “deploy giúp” — mình hướng dẫn từng bước.</div>
+</div>
+
+<script>
+/* ---------- Utility & Storage ---------- */
+const KEY_HISTORY = "mp_bcr_history_v1";
+const KEY_PRED = "mp_bcr_pred_v1";
+const KEY_PATTERN = "mp_bcr_pattern_v1";
+const save = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
+const load = (k,def)=>{ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def }catch(e){return def} }
+
+/* ---------- Data structures ---------- */
+let history = load(KEY_HISTORY, []); // symbols: 'R','B','C'
+let predRecords = load(KEY_PRED, []); // {ts,pred,actual,correct}
+let patternMap = load(KEY_PATTERN, {}); // seq -> counts {R,B,C}
+
+/* ---------- DOM ---------- */
+const btnR = document.getElementById("btnR"), btnB = document.getElementById("btnB"), btnC = document.getElementById("btnC");
+const btnPredict = document.getElementById("btnPredict"), btnExport = document.getElementById("btnExport"), btnReset = document.getElementById("btnReset"), btnUndo = document.getElementById("btnUndo");
+const beadRoadEl = document.getElementById("beadRoad"), logArea = document.getElementById("logArea");
+const statTotal = document.getElementById("statTotal"), statAcc = document.getElementById("statAcc"), statDraw = document.getElementById("statDraw"), countsEl = document.getElementById("counts");
+const predictionBox = document.getElementById("predictionBox"), cauGoi = document.getElementById("cauGoi");
+const wPattern = document.getElementById("wPattern"), wFreq = document.getElementById("wFreq"), wStreak = document.getElementById("wStreak");
+const patternLenInput = document.getElementById("patternLen"), freqWndInput = document.getElementById("freqWnd");
+const miniCanvas = document.getElementById("miniChart");
+const ctx = miniCanvas.getContext("2d");
+
+/* ---------- Pattern memory helpers ---------- */
+function recordPattern(historyArr){
+  const L = Number(patternLenInput.value) || 5;
+  const len = Math.min(L, historyArr.length-1);
+  if(len <=0) return;
+  for(let l=1;l<=len;l++){
+    const seq = historyArr.slice(historyArr.length - l -1, historyArr.length -1).join(",");
+    const next = historyArr[historyArr.length-1];
+    if(!seq) continue;
+    if(!patternMap[seq]) patternMap[seq] = {R:0,B:0,C:0};
+    patternMap[seq][next] = (patternMap[seq][next]||0)+1;
+  }
+  save(KEY_PATTERN, patternMap);
+}
+
+/* ---------- Predictors ---------- */
+function patternPredict(hist){
+  const L = Number(patternLenInput.value) || 5;
+  for(let len=L; len>=1; len--){
+    if(hist.length < len) continue;
+    const seq = hist.slice(hist.length - len, hist.length).join(",");
+    const counts = patternMap[seq];
+    if(counts){
+      const total = counts.R + counts.B + counts.C;
+      const best = Object.keys(counts).reduce((a,b)=>counts[a]>=counts[b]?a:b);
+      return {pred:best, score: total?counts[best]/total:0};
+    }
+  }
+  return {pred:null, score:0};
+}
+
+function frequencyPredict(hist){
+  const w = Math.min(Number(freqWndInput.value)||10, hist.length);
+  const slice = hist.slice(-w);
+  const counts = {R:0,B:0,C:0};
+  slice.forEach(s=>counts[s] = (counts[s]||0)+1);
+  const total = counts.R + counts.B + counts.C;
+  if(total === 0) return {pred:null,score:0};
+  const best = Object.keys(counts).reduce((a,b)=>counts[a]>=counts[b]?a:b);
+  return {pred:best, score: counts[best]/total};
+}
+
+function streakPredict(hist){
+  if(hist.length === 0) return {pred:null,score:0};
+  let last = hist[hist.length-1];
+  let len = 1;
+  for(let i=hist.length-2;i>=0;i--){
+    if(hist[i]===last) len++; else break;
+  }
+  const score = Math.min(0.95, 0.2 + 0.15 * len);
+  return {pred:last, score};
+}
+
+function weightedVote(hist){
+  const p1 = patternPredict(hist);
+  const p2 = frequencyPredict(hist);
+  const p3 = streakPredict(hist);
+  const weights = {
+    pattern: Number(wPattern.value)||0.5,
+    freq: Number(wFreq.value)||0.3,
+    streak: Number(wStreak.value)||0.2
+  };
+  const score = {R:0,B:0,C:0};
+  if(p1.pred) score[p1.pred] += weights.pattern * p1.score;
+  if(p2.pred) score[p2.pred] += weights.freq * p2.score;
+  if(p3.pred) score[p3.pred] += weights.streak * p3.score;
+  const tot = score.R + score.B + score.C;
+  if(tot === 0){
+    const gp = frequencyPredict(hist);
+    return {pred: gp.pred, details:{p1,p2,p3}};
+  }
+  const best = Object.keys(score).reduce((a,b)=>score[a]>=score[b]?a:b);
+  return {pred:best, details:{p1,p2,p3,rawScore:score}};
+}
+
+/* ---------- Bead road rendering ---------- */
+/* Simple bead road: columns array of arrays. On color change -> new column at right and place at top.
+   For same color -> append to current column (push) */
+function buildColumns(hist){
+  const cols = [];
+  for(const s of hist){
+    if(cols.length===0){ cols.push([s]); continue; }
+    const lastCol = cols[cols.length-1];
+    const lastCell = lastCol[lastCol.length-1];
+    if(s === lastCell){
+      lastCol.push(s);
+    } else {
+      cols.push([s]);
+    }
+  }
+  return cols;
+}
+
+function renderBeadRoad(){
+  const cols = buildColumns(history);
+  beadRoadEl.innerHTML = ""; // create columns
+  const wrapper = document.createElement("div");
+  wrapper.className = "columns";
+  for(const col of cols){
+    const c = document.createElement("div"); c.className = "col";
+    for(const cell of col){
+      const el = document.createElement("div");
+      el.className = "cell " + cell;
+      el.textContent = (cell === 'C'? 'H':'');
+      el.title = cell;
+      c.appendChild(el);
+    }
+    wrapper.appendChild(c);
+  }
+  beadRoadEl.appendChild(wrapper);
+}
+
+/* ---------- Log & Stats ---------- */
+function refreshLog(){
+  // show newest first
+  logArea.innerHTML = "";
+  const recent = predRecords.slice().reverse();
+  for(const r of recent){
+    const row = document.createElement("div");
+    row.style.padding = "8px";
+    row.style.borderBottom = "1px solid #f3f4f6";
+    row.innerHTML = `<div style="font-weight:600">${r.pred||''} → ${r.actual||''} <span style="float:right;color:${r.correct? 'green':'red'}">${r.correct===null?'-':(r.correct? '✓':'✗')}</span></div>
+      <div class="small">${new Date(r.ts).toLocaleString()}</div>`;
+    logArea.appendChild(row);
+  }
+  renderStats();
+}
+
+function renderStats(){
+  const total = predRecords.length;
+  const correct = predRecords.filter(p=>p.correct===true).length;
+  const draws = history.filter(h=>h==='C').length;
+  const rCount = history.filter(h=>h==='R').length;
+  const bCount = history.filter(h=>h==='B').length;
+  statTotal.textContent = history.length;
+  statAcc.textContent = total ? Math.round((correct/total)*10000)/100 + '%' : '0%';
+  statDraw.textContent = history.length ? Math.round((draws/history.length)*10000)/100 + '%' : '0%';
+  countsEl.textContent = `${rCount} / ${bCount} / ${draws}`;
+  drawMiniChart();
+  renderCauGoi();
+}
+
+/* ---------- Mini chart (simple cumulative correct) ---------- */
+function drawMiniChart(){
+  const data = predRecords.slice(-100);
+  let cum = 0;
+  const values = data.map(d=>{
+    if(d.correct===true) cum += 1;
+    if(d.correct===false) cum -= 1;
+    return cum;
+  });
+  // draw
+  const w = miniCanvas.width, h = miniCanvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.beginPath();
+  ctx.moveTo(0, h/2);
+  if(values.length>0){
+    for(let i=0;i<values.length;i++){
+      const x = (i/(values.length-1||1)) * w;
+      const y = h/2 - values[i] * 6; // scale
+      ctx.lineTo(x,y);
+    }
+  }
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+/* ---------- Gợi ý cầu (simple heuristics) ---------- */
+function renderCauGoi(){
+  // examine last 6 runs for simple patterns
+  const last = history.slice(-6).join(",");
+  const suggestions = [];
+  // detect alternating
+  if(history.length >=4){
+    const alt = history.slice(-4).every((v,i,arr)=> i===0 || v !== arr[i-1]);
+    if(alt) suggestions.push("Cầu gãy (cầu alternation) có thể tiếp tục.");
+  }
+  // detect long streak
+  let streak=0; for(let i=history.length-1;i>=0;i--){ if(history[i]===history[history.length-1]) streak++; else break; }
+  if(streak>=3) suggestions.push(`Chuỗi ${history[history.length-1]} dài ${streak} ván — có thể tiếp tục hoặc gãy.`);
+  if(suggestions.length===0) suggestions.push("Không có mô hình rõ ràng; dựa vào dự đoán tổng hợp.");
+  cauGoi.textContent = suggestions.join(" | ");
+}
+
+/* ---------- Actions ---------- */
+function saveAll(){
+  save(KEY_HISTORY, history);
+  save(KEY_PRED, predRecords);
+  save(KEY_PATTERN, patternMap);
+}
+
+function addOutcome(symbol){
+  // record prediction evaluation
+  // first: evaluate last prediction if exists (predRecords last may have pred without actual)
+  const lastPred = predRecords.length? predRecords[predRecords.length-1] : null;
+  if(lastPred && lastPred.actual===null){
+    lastPred.actual = symbol;
+    lastPred.correct = lastPred.pred? (lastPred.pred === symbol) : null;
+  }
+  // push a new history entry
+  history.push(symbol);
+  // update pattern memory
+  recordPattern(history);
+  // record a placeholder predRecord for this round (pred will be created by user clicking 'Dự đoán' before adding next result; we create an empty pred so UX consistent)
+  // Actually we only push predRecords when user requested prediction earlier; keep current logic: don't auto-add.
+  saveAll();
+  renderAll();
+}
+
+function makePrediction(){
+  const res = weightedVote(history);
+  const pred = res.pred;
+  predictionBox.textContent = pred || "Không xác định";
+  // push a predRecord with actual=null
+  predRecords.push({ts: Date.now(), pred: pred, actual: null, correct: null});
+  save(KEY_PRED, predRecords);
+  refreshLog();
+  // show details in log top
+  return res;
+}
+
+/* ---------- Export CSV ---------- */
+function exportCSV(){
+  const rows = [["timestamp,prediction,actual,correct"]];
+  predRecords.forEach(r=>{
+    rows.push([`${new Date(r.ts).toISOString()},${r.pred||''},${r.actual||''},${r.correct===null? '': r.correct}`]);
+  });
+  const csv = rows.join("\n");
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "mo-phong-bcr-history.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- UI hooks ---------- */
+btnR.onclick = ()=>{ addOutcome('R'); renderAll(); };
+btnB.onclick = ()=>{ addOutcome('B'); renderAll(); };
+btnC.onclick = ()=>{ addOutcome('C'); renderAll(); };
+btnPredict.onclick = ()=>{ makePrediction(); };
+btnExport.onclick = ()=>{ exportCSV(); };
+btnReset.onclick = ()=>{ if(confirm("Xoá toàn bộ lịch sử?")){ history=[]; predRecords=[]; patternMap={}; saveAll(); renderAll(); } };
+btnUndo.onclick = ()=>{ if(history.length){ history.pop(); save(KEY_HISTORY, history); renderAll(); } };
+
+[wPattern,wFreq,wStreak,patternLenInput,freqWndInput].forEach(el=>el.onchange = ()=>{ saveSettings(); });
+
+function saveSettings(){
+  const s = {
+    pattern: Number(wPattern.value),
+    freq: Number(wFreq.value),
+    streak: Number(wStreak.value),
+    patternLen: Number(patternLenInput.value),
+    freqWnd: Number(freqWndInput.value)
+  };
+  save("mp_bcr_settings_v1", s);
+}
+
+/* ---------- Initialization & render ---------- */
+function renderAll(){
+  renderBeadRoad();
+  refreshLog();
+  renderStats();
+}
+
+(function init(){
+  // load settings if present
+  const s = load("mp_bcr_settings_v1", null);
+  if(s){
+    wPattern.value = s.pattern; wFreq.value = s.freq; wStreak.value = s.streak;
+    patternLenInput.value = s.patternLen; freqWndInput.value = s.freqWnd;
+  }
+  // if there is any predRecords with actual==null, keep as is; else okay
+  renderAll();
+})();
+</script>
+</body>
+</html>
